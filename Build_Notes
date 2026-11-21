@@ -1,0 +1,25 @@
+
+optimize Xplane_eval when i know it's uses
+
+fix the gate count to track what i want, omg AI needs binary subtractions lessons (dumb AI)
+
+gonna need inc/dec and bitshift tacking too....  simplified
+
+remove calls arg from chipset funcs....
+
+<<<<<<<<<<<<<<AI summary gate counter>>>>>>>>>>>>
+* Defined 128-bit bus type (typedef unsigned __int128 uint128_t) in parallel_satisfaction.h 
+for automatic zero-extension on upcasts and silent lower-bit truncation on downcasts.
+* Implemented static inline bitwise gate wrappers ($AND$, $OR$, $XOR$, $NOT$) using Apple 
+Clang-compatible $ identifiers, plus static inline ripple-carry adder (ps_gate_add), two's 
+complement subtractor (ps_gate_sub), and width mask helper (ps_width_mask).
+* Set up header-only gate and operation telemetry via PS_NOINLINE, the PS_CHIPSET_OP_LIST 
+X-Macro, PS_WEAK_GLOBAL atomic counters (stdatomic.h), ps_gate_reset(), and ps_gate_dump(), 
+compiling out cleanly unless -DPS_GATE_COUNT is passed.
+* Implemented the 6 chipset operations in chipset_functions.c (chipset_squareroot, 
+chipset_squared, chipset_multiply, chipset_divide, chipset_plus_1, chipset_minus_1) 
+using the gate primitives and in-place mask pointers.
+* Updated the root Makefile to link build/chipset_functions.o and standardized the master 
+header filename to parallel_satisfaction.h across all targets.
+* Added and passed two math and gate-count verification tests in Verify_Pipeline/
+verify_pipeline.c (3^2 + 4^2 = 5^2 and (2 + 1) x 2 = 6) with zero errors or casting warnings.

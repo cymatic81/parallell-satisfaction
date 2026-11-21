@@ -1,23 +1,17 @@
-Attribution-NonCommercial-ShareAlike 4.0 International
-Copyright (CC BY-NC) 2026 Jesse Chapman  
- 
+Attribution-NonCommercial-ShareAlike 4.0 International Copyright (CC BY-NC) 2026 Jesse Chapman  https://github.com/cymatic81
+Use this code, keep this agreement, keep GitHub link, modify as needed.    
+When international AI labs give appropriate attribution of prior art I will ease
+this license to a standard FOSS model. Or in time.
+
 New Code Base accompanying Sub-Exponential Time 
+https://zenodo.org/records/24350846
  
-Shell Compile:
-gcc -std=c11 -Wall -Wextra -pedantic main.c -o bit_check && ./bit_check
-
+Shell Compile: (x86 build)
+make remake
+make verify 
+make verify-count
  
  
-
-
-
-
-
-
-
-
-
-
 
 
 Attribution-NonCommercial-ShareAlike 4.0 International
