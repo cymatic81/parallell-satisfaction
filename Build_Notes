@@ -1,18 +1,24 @@
 
-optimize Xplane_eval when i know it's uses
+optimize xplane_2adic_eval when i know it's uses
 
-fix the gate count to track what i want, omg AI needs binary subtractions lessons (dumb AI)
+do i need more ops?
 
-gonna need inc/dec and bitshift tacking too....  simplified
+check ops trigger correct tally
 
-remove calls arg from chipset funcs....
+<<<<<<<<<<<<<<AI summary gate granularity & data movement (2) >>>>>>>>>>>>
+* Expanded PS_CHIPSET_OP_LIST(X) in parallel_satisfaction.h to 24 tracked primitives, 
+separating macro chipset ops (op_squareroot, op_squared, op_multiply, op_divide, op_add, 
+op_sub, op_shfx) from single-layer gates, carry stacks, shifts, and bus/register transfers.
+* Added granular gate, shift, and data-movement wrappers ($ADD$, $SUB$, $inc$, $dec$, $SHF1$, 
+$SHFX$, $SHFX8$, $MOV$, $MOV_V$, $MOV_r$, $MOV_VV$, $LOAD$, $SEND$) using Apple Clang-
+compatible $ identifiers.
+* Refactored chipset_functions.c to eliminate software ripple-carry gate inflation, enforce 
+explicit two's-complement subtraction ($NOT$ + $inc$ + $ADD$), unpack dual lanes for binary 
+ops, and log $LOAD$/$SEND$ on pointer reads and writebacks.
 
-<<<<<<<<<<<<<<AI summary gate counter>>>>>>>>>>>>
+<<<<<<<<<<<<<<AI summary gate counter (1) >>>>>>>>>>>>
 * Defined 128-bit bus type (typedef unsigned __int128 uint128_t) in parallel_satisfaction.h 
 for automatic zero-extension on upcasts and silent lower-bit truncation on downcasts.
-* Implemented static inline bitwise gate wrappers ($AND$, $OR$, $XOR$, $NOT$) using Apple 
-Clang-compatible $ identifiers, plus static inline ripple-carry adder (ps_gate_add), two's 
-complement subtractor (ps_gate_sub), and width mask helper (ps_width_mask).
 * Set up header-only gate and operation telemetry via PS_NOINLINE, the PS_CHIPSET_OP_LIST 
 X-Macro, PS_WEAK_GLOBAL atomic counters (stdatomic.h), ps_gate_reset(), and ps_gate_dump(), 
 compiling out cleanly unless -DPS_GATE_COUNT is passed.

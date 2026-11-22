@@ -30,16 +30,30 @@ typedef unsigned __int128 uint128_t;
 
 /* X-Macro list of all Pseudo Chipset Operations & Logic Gates to track */
 #define PS_CHIPSET_OP_LIST(X) \
-    X(squareroot)             \
-    X(squared)                \
-    X(multiply)               \
-    X(divide)                 \
-    X(plus_1)                 \
-    X(minus_1)                \
+    X(op_squareroot)          \
+    X(op_squared)             \
+    X(op_multiply)            \
+    X(op_divide)              \
+    X(op_add)                 \
+    X(op_sub)                 \
+    X(op_shfx)                \
     X(and)                    \
     X(or)                     \
     X(xor)                    \
-    X(not)
+    X(not)                    \
+    X(add)                    \
+    X(sub)                    \
+    X(inc)                    \
+    X(dec)                    \
+    X(shf1)                   \
+    X(shfx)                   \
+    X(shfx8)                  \
+    X(mov)                    \
+    X(mov_v)                  \
+    X(mov_r)                  \
+    X(mov_vv)                 \
+    X(load)                   \
+    X(send)
 
 #ifdef PS_GATE_COUNT
   #include <stdatomic.h>
@@ -80,18 +94,33 @@ typedef unsigned __int128 uint128_t;
 #endif
 
 /* Pseudo Chipset Operation Functions (pass pointer '*' if mutating the mask in-place) */
-PS_NOINLINE void chipset_squareroot(uint128_t *squareroot_mask, uint8_t width, uint8_t calls);
-PS_NOINLINE void chipset_squared   (uint128_t *squared_mask,    uint8_t width, uint8_t calls);
-PS_NOINLINE void chipset_multiply  (uint128_t *multiply_mask,   uint8_t width, uint8_t calls);
-PS_NOINLINE void chipset_divide    (uint128_t *divide_mask,     uint8_t width, uint8_t calls);
-PS_NOINLINE void chipset_plus_1    (uint128_t *plus_1_mask,     uint8_t width, uint8_t calls);
-PS_NOINLINE void chipset_minus_1   (uint128_t *minus_1_mask,    uint8_t width, uint8_t calls);
+PS_NOINLINE void chipset_squareroot(uint128_t *squareroot_mask, uint8_t width);
+PS_NOINLINE void chipset_squared   (uint128_t *squared_mask,    uint8_t width);
+PS_NOINLINE void chipset_multiply  (uint128_t *multiply_mask,   uint8_t width);
+PS_NOINLINE void chipset_divide    (uint128_t *divide_mask,     uint8_t width);
+PS_NOINLINE void chipset_add       (uint128_t *add_mask,        uint8_t width);
+PS_NOINLINE void chipset_sub       (uint128_t *sub_mask,        uint8_t width);
+PS_NOINLINE void chipset_shfx      (uint128_t *shfx_mask,       uint8_t width, uint8_t bit_offset);
 
 /* Pseudo Logic Gates for readability and Count */
-static inline uint128_t $AND$(uint128_t reg1, uint128_t reg2) { PS_COUNT_OP(and); return reg1 & reg2; }
-static inline uint128_t $OR$ (uint128_t reg1, uint128_t reg2) { PS_COUNT_OP(or);  return reg1 | reg2; }
-static inline uint128_t $XOR$(uint128_t reg1, uint128_t reg2) { PS_COUNT_OP(xor); return reg1 ^ reg2; }
-static inline uint128_t $NOT$(uint128_t reg1)                 { PS_COUNT_OP(not); return ~reg1; }
+static inline uint128_t $AND$   (uint128_t reg1, uint128_t reg2) { PS_COUNT_OP(and); return reg1 & reg2; }
+static inline uint128_t $OR$    (uint128_t reg1, uint128_t reg2) { PS_COUNT_OP(or);  return reg1 | reg2; }
+static inline uint128_t $XOR$   (uint128_t reg1, uint128_t reg2) { PS_COUNT_OP(xor); return reg1 ^ reg2; }
+static inline uint128_t $NOT$   (uint128_t reg1)                 { PS_COUNT_OP(not); return ~reg1; }
+static inline uint128_t $ADD$   (uint128_t reg1, uint128_t reg2) { PS_COUNT_OP(add); return reg1 + reg2; } // counts add iterative gate stack as 1
+static inline uint128_t $SUB$   (uint128_t reg1, uint128_t reg2) { PS_COUNT_OP(sub); return reg1 - reg2; } // counts sub iterative gate stack as 1
+static inline uint128_t $INC$   (uint128_t reg1)  { PS_COUNT_OP(inc);   return reg1 + 1; }
+static inline uint128_t $DEC$   (uint128_t reg1)  { PS_COUNT_OP(dec);   return reg1 - 1; }
+static inline uint128_t $SHF1$  (uint128_t reg1)  { PS_COUNT_OP(shf1);  return reg1; }
+static inline uint128_t $SHFX$  (uint128_t reg1)  { PS_COUNT_OP(shfx);  return reg1; }
+static inline uint128_t $SHFX8$ (uint128_t reg1)  { PS_COUNT_OP(shfx8); return reg1; }
+static inline uint128_t $MOV$   (uint128_t reg1)  { PS_COUNT_OP(mov);   return reg1; }
+static inline uint128_t $MOV_V$ (uint128_t reg1)  { PS_COUNT_OP(mov_v); return reg1; } // move RAX to YMM
+static inline uint128_t $MOV_r$ (uint128_t reg1)  { PS_COUNT_OP(mov_r); return reg1; } // move YMM to RAX
+static inline uint128_t $MOV_VV$(uint128_t vec1)  { PS_COUNT_OP(mov_vv);return vec1; } // move YMM to YMM
+static inline uint128_t $LOAD$  (uint128_t mem1)  { PS_COUNT_OP(load);  return mem1; } // likely redundant
+static inline uint128_t $SEND$  (uint128_t reg1)  { PS_COUNT_OP(send);  return reg1; } // likely redundant
+
 
 static inline uint128_t ps_width_mask(uint8_t width) {
     if (width >= 128) return ~(uint128_t)0;
