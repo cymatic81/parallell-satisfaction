@@ -7,6 +7,12 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <x86intrin.h>
+
+#ifndef PS_UINT128_DEFINED
+#define PS_UINT128_DEFINED
+typedef unsigned __int128 uint128_t;
+#endif
 
 /* Standard 32-bit test vector masks */
 #define VEC_ZERO        ((uint32_t)0x00000000U)
@@ -19,9 +25,44 @@
 #define VEC_NIBBLE_MASK ((uint32_t)0x0F0F0F0FU)
 #define VEC_DEADBEEF    ((uint32_t)0xDEADBEEFU)
 #define VEC_CAFEBABE    ((uint32_t)0xCAFEBABEU)
+#define VEC_5A5A5A5A    ((uint32_t)0x5A5A5A5AU)
 
 /* Combined 64-bit source for >32-bit truncations */
 #define VEC_DEAD_CAFE_64 (((uint64_t)VEC_DEADBEEF << 32) | (uint64_t)VEC_CAFEBABE)
+
+/* 64-Bit Test Vector Masks (uint64_t) */
+#define VEC64_ALL_ONES  ((uint64_t)0xFFFFFFFFFFFFFFFFULL)
+#define VEC64_DEADBEEF  ((uint64_t)0xDEADBEEFDEADBEEFULL)
+#define VEC64_CAFEBABE  ((uint64_t)0xCAFEBABECAFEBABEULL)
+#define VEC64_DDDDDDDD  ((uint64_t)0xDDDDDDDDDDDDDDDDULL)
+#define VEC64_AAAAAAAA  ((uint64_t)0xAAAAAAAAAAAAAAAAULL)
+#define VEC64_55555555  ((uint64_t)0x5555555555555555ULL)
+#define VEC64_22222222  ((uint64_t)0x2222222222222222ULL)
+#define VEC64_5A5A5A5A  ((uint64_t)0x5A5A5A5A5A5A5A5AULL)
+#define VEC64_NULL      ((uint64_t)0x0000000000000000ULL)
+
+/* 128-Bit Test Vector Masks (uint128_t) */
+#define VEC128_ALL_ONES ((((uint128_t)VEC64_ALL_ONES) << 64) | (uint128_t)VEC64_ALL_ONES)
+#define VEC128_DEADBEEF ((((uint128_t)VEC64_DEADBEEF) << 64) | (uint128_t)VEC64_DEADBEEF)
+#define VEC128_CAFEBABE ((((uint128_t)VEC64_CAFEBABE) << 64) | (uint128_t)VEC64_CAFEBABE)
+#define VEC128_DDDDDDDD ((((uint128_t)VEC64_DDDDDDDD) << 64) | (uint128_t)VEC64_DDDDDDDD)
+#define VEC128_AAAAAAAA ((((uint128_t)VEC64_AAAAAAAA) << 64) | (uint128_t)VEC64_AAAAAAAA)
+#define VEC128_55555555 ((((uint128_t)VEC64_55555555) << 64) | (uint128_t)VEC64_55555555)
+#define VEC128_22222222 ((((uint128_t)VEC64_22222222) << 64) | (uint128_t)VEC64_22222222)
+#define VEC128_5A5A5A5A ((((uint128_t)VEC64_5A5A5A5A) << 64) | (uint128_t)VEC64_5A5A5A5A)
+#define VEC128_NULL     ((uint128_t)0)
+
+
+/* 256-Bit Test Vector Masks (__m256i) */
+#define VEC256_ALL_ONES (_mm256_set1_epi64x((long long)VEC64_ALL_ONES))
+#define VEC256_DEADBEEF (_mm256_set1_epi64x((long long)VEC64_DEADBEEF))
+#define VEC256_CAFEBABE (_mm256_set1_epi64x((long long)VEC64_CAFEBABE))
+#define VEC256_DDDDDDDD (_mm256_set1_epi64x((long long)VEC64_DDDDDDDD))
+#define VEC256_AAAAAAAA (_mm256_set1_epi64x((long long)VEC64_AAAAAAAA))
+#define VEC256_55555555 (_mm256_set1_epi64x((long long)VEC64_55555555))
+#define VEC256_22222222 (_mm256_set1_epi64x((long long)VEC64_22222222))
+#define VEC256_5A5A5A5A (_mm256_set1_epi64x((long long)VEC64_5A5A5A5A))
+#define VEC256_NULL     (_mm256_setzero_si256())
 
 static const struct {
     const char *name;

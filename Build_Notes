@@ -1,11 +1,41 @@
+PS_NOINLINE scalar RAX operation (rax_pop1 / rax_pop0 or chipset_pop1 / chipset_pop0) that 
+reads a scalar uint64_t (or uint128_t *) and writes the 1-bit / 0-bit count out (with 
+$LOAD$ / $SEND$ and PS_COUNT_OP), need this wrapper. or can i just stack em on X(pop1) X(pop0)
+
+nomanclature: lane for width and leaf(layer) for depth
 
 optimize xplane_2adic_eval when i know it's uses
 
-do i need more ops?
+PS_COUNT_OP in Pseudo Logic Gates overkill? just count as X?
 
-check ops trigger correct tally
+do i need more ops? less?
 
-<<<<<<<<<<<<<<AI summary gate granularity & data movement (2) >>>>>>>>>>>>
+chipset_functions.c is getting too big for one file....
+
+AI did vector masks like normal MOV_VV should almost never happen lotsa MOV_V/MOV please.... 
+
+gotta make sure $MOV_V$ $MOV_r$ tally.     most == assigns are MOV/MOV_V
+
+check ops trigger correct tally.   (do this last?)
+
+chipset_functions.c get AI to be verbose in // comments every line noting tally
+
+after i know the telemetry i need /*Pseudo Logic Gates*/ may be redundant.
+
+make verify-doc for whitespace output
+
+<<<<<<<<<<<<<<AI summary: SIMD layer & population gates (3) >>>>>>>>>>>>
+* Implemented $POP1$ and $POP0$ bit-population gates using hardware __builtin_popcountll 
+across width-masked uint128_t lanes, and removed the redundant ripple-carry ps_gate_add / 
+ps_gate_sub helpers from parallel_satisfaction.h to prevent accidental gate-count inflation.
+* Implemented all 11 simd_* vector functions in chipset_functions.c (broadcast, lane insert/
+extract, lane permute, YMM-RAX bitwise AND/XOR, cross-lane carry bridge, and parallel lane 
+inc/dec/pop1/pop0) instrumented with $MOV_V$, $MOV_r$, $MOV_VV$, $SHFX$, and $SHFX8$.
+* Added a dedicated SIMD/Vector layer to PS_CHIPSET_OP_LIST(X) (simd_bcast, simd_extract, 
+simd_permute, simd_and_rax, simd_xor_rax, simd_carry_bridge) and declared 11 PS_NOINLINE vector 
+operations in parallel_satisfaction.h with hardware AVX/AVX2 equivalents documented inline.
+
+<<<<<<<<<<<<<<AI summary: gate granularity & data movement (2) >>>>>>>>>>>>
 * Expanded PS_CHIPSET_OP_LIST(X) in parallel_satisfaction.h to 24 tracked primitives, 
 separating macro chipset ops (op_squareroot, op_squared, op_multiply, op_divide, op_add, 
 op_sub, op_shfx) from single-layer gates, carry stacks, shifts, and bus/register transfers.
@@ -16,7 +46,7 @@ compatible $ identifiers.
 explicit two's-complement subtraction ($NOT$ + $inc$ + $ADD$), unpack dual lanes for binary 
 ops, and log $LOAD$/$SEND$ on pointer reads and writebacks.
 
-<<<<<<<<<<<<<<AI summary gate counter (1) >>>>>>>>>>>>
+<<<<<<<<<<<<<<AI summary: gate counter (1) >>>>>>>>>>>>
 * Defined 128-bit bus type (typedef unsigned __int128 uint128_t) in parallel_satisfaction.h 
 for automatic zero-extension on upcasts and silent lower-bit truncation on downcasts.
 * Set up header-only gate and operation telemetry via PS_NOINLINE, the PS_CHIPSET_OP_LIST 

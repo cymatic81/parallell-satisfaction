@@ -11,16 +11,19 @@ static inline void verify_gate_dump(FILE *out, const char *label) {
     if (!out) out = stdout;
     fprintf(out, "=== Chipset Op Tally [%s] ===\n", label ? label : "default");
     #define VERIFY_PRINT_COUNTER(name) do { \
+        if (strcmp(#name, "simd_bcast") == 0) { \
+            fprintf(out, "===simd layer===\n"); \
+        } \
         if (strcmp(#name, "and") == 0) { \
             fprintf(out, "===ops to gate conversion===\n"); \
         } \
-        char disp[64]; \
+   char disp[64]; \
         if (strcmp(#name, "add") == 0 || strcmp(#name, "sub") == 0) { \
             snprintf(disp, sizeof(disp), "chipset_%s (tick/gate stack)", #name); \
         } else { \
             snprintf(disp, sizeof(disp), "chipset_%s", #name); \
         } \
-                fprintf(out, "  %-30s : %llu\n", disp, \
+        fprintf(out, "  %-30s : %llu\n", disp, \
                 (unsigned long long)atomic_load_explicit(&(g_calls_chipset_##name), memory_order_relaxed)); \
     } while (0);
     PS_CHIPSET_OP_LIST(VERIFY_PRINT_COUNTER)
@@ -97,6 +100,64 @@ int main(void) {
                    binary_tail_hexa(node.Real, 1));
         }
     }
+
+    printf("\n=== SIMD / VECTOR LAYER & POPCOUNT TALLY TESTS ===\n");
+    ps_gate_reset();
+
+    /* 1. Broadcast RAX across four 32-bit lanes (hits: simd_bcast, mov_v) */
+    uint128_t simd_vec = 0;
+    simd_broadcast_rax(&simd_vec, VEC_DEADBEEF, 32);
+    int ok_bcast = (simd_vec == VEC128_DEADBEEF);
+
+    /* 2. Insert CAFEBABE into lane 2 & extract lane 2 back to RAX (hits: simd_extract, mov_v, mov_r) */
+    uint64_t extracted_rax = 0;
+    simd_insert_lane(&simd_vec, VEC_CAFEBABE, 2, 32);
+    simd_extract_lane(&simd_vec, &extracted_rax, 2, 32);
+    int ok_ins_ext = (extracted_rax == VEC_CAFEBABE);
+
+    /* 3. Permute 32-bit lanes: swap lane 0 <-> lane 2 via perm_mask 0b11_00_01_10 = 0xC6 (hits: simd_permute, mov_vv) */
+    simd_permute_lanes(&simd_vec, 0xC6U, 32);
+    uint64_t lane0_after_perm = 0;
+    simd_extract_lane(&simd_vec, &lane0_after_perm, 0, 32);
+    int ok_perm = (lane0_after_perm == VEC_CAFEBABE);
+
+    /* 4. Vector AND & XOR with scalar RAX across 32-bit lanes (hits: simd_and_rax, simd_xor_rax) */
+    uint128_t logic_vec = VEC128_ALL_ONES;
+    simd_ymm_and_rax(&logic_vec, VEC_5A5A5A5A, 32);
+    simd_ymm_xor_rax(&logic_vec, VEC_5A5A5A5A, 32);
+    int ok_vec_logic = (logic_vec == VEC128_NULL);
+
+    /* 5. Parallel lane INC & DEC across four 32-bit lanes (hits: inc, dec) */
+    uint128_t inc_vec = VEC128_NULL;
+    simd_lane_inc(&inc_vec, 32, 4);
+    int ok_inc = ((uint64_t)inc_vec == 0x0000000100000001ULL);
+    simd_lane_dec(&inc_vec, 32, 4);
+    int ok_dec = (inc_vec == VEC128_NULL);
+
+    /* 6. Cross-lane carry bridge: MSB of lane 0 (0x80000000) bridges into bit 0 of lane 1 (hits: simd_carry_bridge) */
+    uint128_t carry_vec = (uint128_t)VEC_WALK_MSB;
+    simd_carry_bridge(&carry_vec, 32, 4);
+    uint64_t lane1_carried = 0;
+    simd_extract_lane(&carry_vec, &lane1_carried, 1, 32);
+    int ok_carry = (lane1_carried == 1ULL);
+
+    /* 7. Lane POP1 & POP0 across four 32-bit lanes of 0x55555555 (16 ones, 16 zeros per lane) */
+    uint128_t pop1_vec = VEC128_55555555;
+    uint128_t pop0_vec = VEC128_55555555;
+    simd_lane_pop1(&pop1_vec, 32, 4);
+    simd_lane_pop0(&pop0_vec, 32, 4);
+    int ok_pop = ((uint64_t)pop1_vec == 0x0000001000000010ULL &&
+                  (uint64_t)pop0_vec == 0x0000001000000010ULL);
+
+    printf("SIMD Suite: bcast[%s] ins/ext[%s] perm[%s] and/xor[%s] inc/dec[%s] carry[%s] pop1/0[%s]\n",
+           ok_bcast ? "PASS" : "FAIL",
+           ok_ins_ext ? "PASS" : "FAIL",
+           ok_perm ? "PASS" : "FAIL",
+           ok_vec_logic ? "PASS" : "FAIL",
+           (ok_inc && ok_dec) ? "PASS" : "FAIL",
+           ok_carry ? "PASS" : "FAIL",
+           ok_pop ? "PASS" : "FAIL");
+    verify_gate_dump(stdout, "SIMD Layer & Popcount");
 
     printf("\n=== CHIPSET MATH & LOGIC GATE TALLY TESTS ===\n");
 

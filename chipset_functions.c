@@ -154,3 +154,237 @@ PS_NOINLINE void chipset_shfx(uint128_t *shfx_mask, uint8_t width, uint8_t bit_o
 
     *shfx_mask = $SEND$($AND$(val, wmask));
 }
+
+
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* SIMD / Vector Layer Implementations                                                                                           */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+PS_NOINLINE void simd_broadcast_rax(uint128_t *vec_mask, uint64_t rax, uint8_t lane_width) {
+    PS_COUNT_OP(simd_bcast);
+    if (lane_width == 0 || lane_width > 128) return;
+
+    uint128_t lmask     = ps_width_mask(lane_width);
+    uint128_t lane_val  = $AND$($MOV_V$((uint128_t)rax), lmask);
+    uint128_t out_vec   = 0;
+    uint8_t   num_lanes = (uint8_t)(128U / lane_width);
+
+    for (uint8_t i = 0; i < num_lanes; ++i) {
+        uint8_t   shift   = (uint8_t)(i * lane_width);
+        uint128_t shifted = (shift == 0) ? lane_val
+                          : ((shift & 7U) == 0) ? ($SHFX8$(lane_val) << shift)
+                                                : ($SHFX$(lane_val) << shift);
+        out_vec = $OR$(out_vec, shifted);
+    }
+    *vec_mask = $SEND$(out_vec); }
+
+PS_NOINLINE void simd_insert_lane(uint128_t *vec_mask, uint64_t rax, uint8_t lane_idx, uint8_t lane_w) {
+    if (lane_w == 0 || lane_w > 128) return;
+    uint8_t max_lanes = (uint8_t)(128U / lane_w);
+    if (lane_idx >= max_lanes) return;
+
+    uint128_t vec       = $LOAD$(*vec_mask);
+    uint128_t lmask     = ps_width_mask(lane_w);
+    uint128_t lane_val  = $AND$($MOV_V$((uint128_t)rax), lmask);
+    uint8_t   shift     = (uint8_t)(lane_idx * lane_w);
+
+    uint128_t slot_mask = (shift == 0) ? lmask
+                        : ((shift & 7U) == 0) ? ($SHFX8$(lmask) << shift)
+                                              : ($SHFX$(lmask) << shift);
+    uint128_t ins_bits  = (shift == 0) ? lane_val
+                        : ((shift & 7U) == 0) ? ($SHFX8$(lane_val) << shift)
+                                              : ($SHFX$(lane_val) << shift);
+    vec = $OR$($AND$(vec, $NOT$(slot_mask)), ins_bits);
+    *vec_mask = $SEND$(vec); }
+
+PS_NOINLINE void simd_extract_lane(const uint128_t *vec_mask, uint64_t *rax_out, uint8_t lane_idx, uint8_t lane_w) {
+    PS_COUNT_OP(simd_extract);
+    if (lane_w == 0 || lane_w > 64) return;
+    uint8_t max_lanes = (uint8_t)(128U / lane_w);
+    if (lane_idx >= max_lanes) return;
+
+    uint128_t vec     = $LOAD$(*vec_mask);
+    uint128_t lmask   = ps_width_mask(lane_w);
+    uint8_t   shift   = (uint8_t)(lane_idx * lane_w);
+    uint128_t shifted = (shift == 0) ? vec
+                      : ((shift & 7U) == 0) ? ($SHFX8$(vec) >> shift)
+                                            : ($SHFX$(vec) >> shift);
+    uint128_t lane    = $MOV_r$($AND$(shifted, lmask));
+    *rax_out = (uint64_t)$SEND$(lane); }
+
+PS_NOINLINE void simd_permute_lanes(uint128_t *vec_mask, uint8_t perm_mask, uint8_t lane_w) {
+    PS_COUNT_OP(simd_permute);
+    if (lane_w == 0 || lane_w > 64) return;
+    uint8_t num_lanes = (uint8_t)(128U / lane_w);
+    if (num_lanes > 4) num_lanes = 4; /* 2-bit selector per lane in 8-bit perm_mask */
+
+    uint128_t src   = $MOV_VV$($LOAD$(*vec_mask));
+    uint128_t lmask = ps_width_mask(lane_w);
+    uint128_t out   = 0;
+
+    for (uint8_t dst_i = 0; dst_i < num_lanes; ++dst_i) {
+        uint8_t   src_i   = (uint8_t)((perm_mask >> (dst_i * 2U)) & 0x03U) % num_lanes;
+        uint8_t   r_shift = (uint8_t)(src_i * lane_w);
+        uint8_t   l_shift = (uint8_t)(dst_i * lane_w);
+
+        uint128_t extracted = (r_shift == 0) ? src
+                            : ((r_shift & 7U) == 0) ? ($SHFX8$(src) >> r_shift)
+                                                    : ($SHFX$(src) >> r_shift);
+        extracted = $AND$(extracted, lmask);
+        uint128_t placed    = (l_shift == 0) ? extracted
+                            : ((l_shift & 7U) == 0) ? ($SHFX8$(extracted) << l_shift)
+                                                    : ($SHFX$(extracted) << l_shift);
+        out = $OR$(out, placed);
+    }
+    *vec_mask = $SEND$(out); }
+
+PS_NOINLINE void simd_ymm_and_rax(uint128_t *vec_mask, uint64_t rax, uint8_t lane_width) {
+    PS_COUNT_OP(simd_and_rax);
+    if (lane_width == 0 || lane_width > 128) return;
+
+    uint128_t vec       = $LOAD$(*vec_mask);
+    uint128_t lmask     = ps_width_mask(lane_width);
+    uint128_t lane_val  = $AND$($MOV_V$((uint128_t)rax), lmask);
+    uint128_t bcast     = 0;
+    uint8_t   num_lanes = (uint8_t)(128U / lane_width);
+
+    for (uint8_t i = 0; i < num_lanes; ++i) {
+        uint8_t   shift   = (uint8_t)(i * lane_width);
+        uint128_t shifted = (shift == 0) ? lane_val
+                          : ((shift & 7U) == 0) ? ($SHFX8$(lane_val) << shift)
+                                                : ($SHFX$(lane_val) << shift);
+        bcast = $OR$(bcast, shifted);
+    }
+    *vec_mask = $SEND$($AND$(vec, bcast)); }
+
+PS_NOINLINE void simd_ymm_xor_rax(uint128_t *vec_mask, uint64_t rax, uint8_t lane_width) {
+    PS_COUNT_OP(simd_xor_rax);
+    if (lane_width == 0 || lane_width > 128) return;
+
+    uint128_t vec       = $LOAD$(*vec_mask);
+    uint128_t lmask     = ps_width_mask(lane_width);
+    uint128_t lane_val  = $AND$($MOV_V$((uint128_t)rax), lmask);
+    uint128_t bcast     = 0;
+    uint8_t   num_lanes = (uint8_t)(128U / lane_width);
+
+    for (uint8_t i = 0; i < num_lanes; ++i) {
+        uint8_t   shift   = (uint8_t)(i * lane_width);
+        uint128_t shifted = (shift == 0) ? lane_val
+                          : ((shift & 7U) == 0) ? ($SHFX8$(lane_val) << shift)
+                                                : ($SHFX$(lane_val) << shift);
+        bcast = $OR$(bcast, shifted);
+    }
+    *vec_mask = $SEND$($XOR$(vec, bcast)); }
+
+PS_NOINLINE void simd_carry_bridge(uint128_t *vec_mask, uint8_t lane_width, uint8_t lane_count) {
+    PS_COUNT_OP(simd_carry_bridge);
+    if (lane_width == 0 || lane_count < 2 || (uint16_t)lane_width * lane_count > 128U) return;
+
+    uint128_t vec   = $LOAD$(*vec_mask);
+    uint128_t lmask = ps_width_mask(lane_width);
+
+    /* Bridge MSB (bit lane_width - 1) of lane i into bit 0 of lane i + 1 */
+    for (uint8_t i = 0; i + 1 < lane_count; ++i) {
+        uint8_t   src_shift = (uint8_t)(i * lane_width);
+        uint8_t   dst_shift = (uint8_t)((i + 1U) * lane_width);
+
+        uint128_t lane_i    = (src_shift == 0) ? vec
+                            : ((src_shift & 7U) == 0) ? ($SHFX8$(vec) >> src_shift)
+                                                      : ($SHFX$(vec) >> src_shift);
+        lane_i = $AND$(lane_i, lmask);
+        uint128_t msb_bit   = (lane_width > 1) ? $AND$($SHFX$(lane_i) >> (lane_width - 1U), 1)
+                                               : $AND$(lane_i, 1);
+
+        if (msb_bit != 0) {
+            uint128_t dst_lane = (dst_shift & 7U) == 0 ? ($SHFX8$(vec) >> dst_shift)
+                                                       : ($SHFX$(vec) >> dst_shift);
+            dst_lane = $AND$($ADD$($AND$(dst_lane, lmask), msb_bit), lmask);
+            uint128_t slot_mask = (dst_shift & 7U) == 0 ? ($SHFX8$(lmask) << dst_shift)
+                                                        : ($SHFX$(lmask) << dst_shift);
+            uint128_t placed    = (dst_shift & 7U) == 0 ? ($SHFX8$(dst_lane) << dst_shift)
+                                                        : ($SHFX$(dst_lane) << dst_shift);
+            vec = $OR$($AND$(vec, $NOT$(slot_mask)), placed);
+        }
+    }
+    *vec_mask = $SEND$(vec); }
+
+PS_NOINLINE void simd_lane_inc(uint128_t *vec_mask, uint8_t lane_width, uint8_t lane_count) {
+    if (lane_width == 0 || (uint16_t)lane_width * lane_count > 128U) return;
+
+    uint128_t vec   = $LOAD$(*vec_mask);
+    uint128_t lmask = ps_width_mask(lane_width);
+    uint128_t out   = 0;
+
+    for (uint8_t i = 0; i < lane_count; ++i) {
+        uint8_t   shift = (uint8_t)(i * lane_width);
+        uint128_t lane  = (shift == 0) ? vec
+                        : ((shift & 7U) == 0) ? ($SHFX8$(vec) >> shift)
+                                              : ($SHFX$(vec) >> shift);
+        lane = $AND$($INC$($AND$(lane, lmask)), lmask);
+        uint128_t placed = (shift == 0) ? lane
+                         : ((shift & 7U) == 0) ? ($SHFX8$(lane) << shift)
+                                               : ($SHFX$(lane) << shift);
+        out = $OR$(out, placed);
+    }
+    *vec_mask = $SEND$(out); }
+
+PS_NOINLINE void simd_lane_dec(uint128_t *vec_mask, uint8_t lane_width, uint8_t lane_count) {
+    if (lane_width == 0 || (uint16_t)lane_width * lane_count > 128U) return;
+
+    uint128_t vec   = $LOAD$(*vec_mask);
+    uint128_t lmask = ps_width_mask(lane_width);
+    uint128_t out   = 0;
+
+    for (uint8_t i = 0; i < lane_count; ++i) {
+        uint8_t   shift = (uint8_t)(i * lane_width);
+        uint128_t lane  = (shift == 0) ? vec
+                        : ((shift & 7U) == 0) ? ($SHFX8$(vec) >> shift)
+                                              : ($SHFX$(vec) >> shift);
+        lane = $AND$($DEC$($AND$(lane, lmask)), lmask);
+        uint128_t placed = (shift == 0) ? lane
+                         : ((shift & 7U) == 0) ? ($SHFX8$(lane) << shift)
+                                               : ($SHFX$(lane) << shift);
+        out = $OR$(out, placed);
+    }
+    *vec_mask = $SEND$(out); }
+
+PS_NOINLINE void simd_lane_pop1(uint128_t *vec_mask, uint8_t lane_width, uint8_t lane_count) {
+    if (lane_width == 0 || (uint16_t)lane_width * lane_count > 128U) return;
+
+    uint128_t vec   = $LOAD$(*vec_mask);
+    uint128_t lmask = ps_width_mask(lane_width);
+    uint128_t out   = 0;
+
+    for (uint8_t i = 0; i < lane_count; ++i) {
+        uint8_t   shift = (uint8_t)(i * lane_width);
+        uint128_t lane  = (shift == 0) ? vec
+                        : ((shift & 7U) == 0) ? ($SHFX8$(vec) >> shift)
+                                              : ($SHFX$(vec) >> shift);
+        uint128_t ones  = $AND$($POP1$(lane, lane_width), lmask);
+        uint128_t placed = (shift == 0) ? ones
+: ((shift & 7U) == 0) ? ($SHFX8$(ones) << shift)
+: ($SHFX$(ones) << shift);
+out = $OR$(out, placed);
+}
+*vec_mask = $SEND$(out); }
+
+PS_NOINLINE void simd_lane_pop0(uint128_t *vec_mask, uint8_t lane_width, uint8_t lane_count) {
+if (lane_width == 0 || (uint16_t)lane_width * lane_count > 128U) return;
+uint128_t vec   = $LOAD$(*vec_mask);
+uint128_t lmask = ps_width_mask(lane_width);
+uint128_t out   = 0;
+for (uint8_t i = 0; i < lane_count; ++i) {
+uint8_t   shift = (uint8_t)(i * lane_width);
+uint128_t lane  = (shift == 0) ? vec
+: ((shift & 7U) == 0) ? ($SHFX8$(vec) >> shift)
+: ($SHFX$(vec) >> shift);
+uint128_t zeros = $AND$($POP0$(lane, lane_width), lmask);
+uint128_t placed = (shift == 0) ? zeros
+: ((shift & 7U) == 0) ? ($SHFX8$(zeros) << shift)
+: ($SHFX$(zeros) << shift);
+out = $OR$(out, placed);
+}
+*vec_mask = $SEND$(out); }

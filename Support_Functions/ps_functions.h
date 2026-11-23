@@ -38,7 +38,7 @@ typedef enum {
     XPLANE_OPT_EXIT_INF_POS   = 0x20   // +1 Infinity Exit
 } twoadic_opt_t;
 
-typedef struct {
+typedef struct {            //from here down may have to be upgraded to uint128
     uint64_t Real;          
     uint64_t ShearRollover; 
     uint64_t Imaginary;     

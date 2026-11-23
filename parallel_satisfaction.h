@@ -5,21 +5,21 @@
 #ifndef PARALLEL_SATISFACTION_H
 #define PARALLEL_SATISFACTION_H
 
-/* 1. Standard C11 Base */
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <x86intrin.h>
 
-/* 2. Support Functions & Core 2-Adic Evaluation Engine */
 #include "Support_Functions/ps_functions.h"
 
-/* 3. Verification Test Vectors (Optional: only loaded when building tests) */
+#ifndef PS_UINT128_DEFINED
+#define PS_UINT128_DEFINED
+typedef unsigned __int128 uint128_t; // typedef for casting 
+#endif
+
 #ifdef PS_ENABLE_VERIFY_HEADERS
   #include "Verify_Pipeline/verify_pipetest.h"
 #endif
-
-typedef unsigned __int128 uint128_t;
 
 /* Prevent compiler inlining so every chipset invocation is preserved & measurable */
 #if defined(__GNUC__) || defined(__clang__)
@@ -30,30 +30,14 @@ typedef unsigned __int128 uint128_t;
 
 /* X-Macro list of all Pseudo Chipset Operations & Logic Gates to track */
 #define PS_CHIPSET_OP_LIST(X) \
-    X(op_squareroot)          \
-    X(op_squared)             \
-    X(op_multiply)            \
-    X(op_divide)              \
-    X(op_add)                 \
-    X(op_sub)                 \
-    X(op_shfx)                \
-    X(and)                    \
-    X(or)                     \
-    X(xor)                    \
-    X(not)                    \
-    X(add)                    \
-    X(sub)                    \
-    X(inc)                    \
-    X(dec)                    \
-    X(shf1)                   \
-    X(shfx)                   \
-    X(shfx8)                  \
-    X(mov)                    \
-    X(mov_v)                  \
-    X(mov_r)                  \
-    X(mov_vv)                 \
-    X(load)                   \
-    X(send)
+    /* op */ \
+    X(op_squareroot) X(op_squared) X(op_multiply) X(op_divide) X(op_add) X(op_sub) X(op_shfx) \
+    /* simd */ \
+    X(simd_bcast) X(simd_extract) X(simd_permute) X(simd_and_rax) X(simd_xor_rax) X(simd_carry_bridge) \
+    /* gate */ \
+    X(and) X(or) X(xor) X(not) X(add) X(sub) X(inc) X(dec) X(shf1) X(shfx) X(shfx8) X(pop1) X(pop0) \
+    /* mov */ \
+    X(mov) X(mov_v) X(mov_r) X(mov_vv) X(load) X(send)
 
 #ifdef PS_GATE_COUNT
   #include <stdatomic.h>
@@ -93,7 +77,7 @@ typedef unsigned __int128 uint128_t;
   static inline void ps_gate_dump(FILE *out, const char *label) { (void)out; (void)label; }
 #endif
 
-/* Pseudo Chipset Operation Functions (pass pointer '*' if mutating the mask in-place) */
+/* Pseudo C level opertions containing chipset instructions(pass pointer '*' if mutating the mask in-place) */
 PS_NOINLINE void chipset_squareroot(uint128_t *squareroot_mask, uint8_t width);
 PS_NOINLINE void chipset_squared   (uint128_t *squared_mask,    uint8_t width);
 PS_NOINLINE void chipset_multiply  (uint128_t *multiply_mask,   uint8_t width);
@@ -101,6 +85,23 @@ PS_NOINLINE void chipset_divide    (uint128_t *divide_mask,     uint8_t width);
 PS_NOINLINE void chipset_add       (uint128_t *add_mask,        uint8_t width);
 PS_NOINLINE void chipset_sub       (uint128_t *sub_mask,        uint8_t width);
 PS_NOINLINE void chipset_shfx      (uint128_t *shfx_mask,       uint8_t width, uint8_t bit_offset);
+//chipset pop needed?
+
+/* Pseudo Data transfer Chipset instructions */
+//un-needed layer??? 
+
+/* Pseudo SIMD / Vector Layer Chipset Instructions (pass pointer '*' if mutating the vector/mask in-place) */
+PS_NOINLINE void simd_broadcast_rax (uint128_t *vec_mask, uint64_t rax, uint8_t lane_width);                          // VPBROADCASTQ / VPBROADCASTD (broadcast RAX across all lanes)
+PS_NOINLINE void simd_insert_lane   (uint128_t *vec_mask, uint64_t rax, uint8_t lane_idx, uint8_t lane_w);            // VPINSRQ / VPINSRD (RAX -> YMM lane via $MOV_V$)
+PS_NOINLINE void simd_extract_lane  (const uint128_t *vec_mask, uint64_t *rax_out, uint8_t lane_idx, uint8_t lane_w); // VPEXTRQ / VMOVQ (YMM lane -> RAX via $MOV_r$)
+PS_NOINLINE void simd_permute_lanes (uint128_t *vec_mask, uint8_t perm_mask, uint8_t lane_w);                         // VPERMQ / VPSHUFD (YMM <-> YMM lane reorder via $MOV_VV$)
+PS_NOINLINE void simd_ymm_and_rax   (uint128_t *vec_mask, uint64_t rax, uint8_t lane_width);                          // VPAND (YMM & RAX across all packed lanes)
+PS_NOINLINE void simd_ymm_xor_rax   (uint128_t *vec_mask, uint64_t rax, uint8_t lane_width);                          // VPXOR (YMM ^ RAX across all packed lanes)
+PS_NOINLINE void simd_carry_bridge  (uint128_t *vec_mask, uint8_t lane_width, uint8_t lane_count);                    // VPSLLQ / VPOR (bridge carry/overflow bit from lane i to lane i+1)
+PS_NOINLINE void simd_lane_inc      (uint128_t *vec_mask, uint8_t lane_width, uint8_t lane_count);                    // VPADDQ / VPADDD (parallel +1 increment across all lanes)
+PS_NOINLINE void simd_lane_dec      (uint128_t *vec_mask, uint8_t lane_width, uint8_t lane_count);                    // VPSUBQ / VPSUBD (parallel -1 decrement across all lanes)
+PS_NOINLINE void simd_lane_pop1     (uint128_t *vec_mask, uint8_t lane_width, uint8_t lane_count);                    // VPOPCNTDQ (count total '1' bits per lane via $POP1$)
+PS_NOINLINE void simd_lane_pop0     (uint128_t *vec_mask, uint8_t lane_width, uint8_t lane_count);                    // VPOPCNTDQ + VPANDN (count total '0' bits per lane via $POP0$)
 
 /* Pseudo Logic Gates for readability and Count */
 static inline uint128_t $AND$   (uint128_t reg1, uint128_t reg2) { PS_COUNT_OP(and); return reg1 & reg2; }
@@ -121,48 +122,25 @@ static inline uint128_t $MOV_VV$(uint128_t vec1)  { PS_COUNT_OP(mov_vv);return v
 static inline uint128_t $LOAD$  (uint128_t mem1)  { PS_COUNT_OP(load);  return mem1; } // likely redundant
 static inline uint128_t $SEND$  (uint128_t reg1)  { PS_COUNT_OP(send);  return reg1; } // likely redundant
 
-
+/* Bit-Width Masking Helper (clamps bus width 0..128 bits) */
 static inline uint128_t ps_width_mask(uint8_t width) {
     if (width >= 128) return ~(uint128_t)0;
     if (width == 0)   return 0;
-    return ((uint128_t)1 << width) - 1;
-}
-
-static inline uint128_t ps_gate_add(uint128_t a, uint128_t b) {
-    while (b != 0) {
-        uint128_t carry = $AND$(a, b) << 1;
-        a = $XOR$(a, b);
-        b = carry;
-    }
-    return a;
-}
-
-static inline uint128_t ps_gate_sub(uint128_t a, uint128_t b) {
-    return ps_gate_add(a, ps_gate_add($NOT$(b), 1));
-}
-
-
-/* Pseudo Minimum Chipset Instructions for logic gate count 
-
-PS_NOINLINE void ymm_and_rax();
-
-PS_NOINLINE void ymm_xor_rax();
-
-RAX ^ lane
-
-RAX & lane
-
-RBX ^ lane
-
-RBX & lane
-
-YMM ^ RAX
-
-YMM & RAX
-
-YMM inc/dec lane
-
-YMM bit shift (bridge the carry)
-*/
+    return ((uint128_t)1 << width) - 1; }
+/* Pseudo Logic Gates (continued) */
+static inline uint128_t $POP1$(uint128_t reg1, uint8_t width) {   // can i tighten these two inlines up?         
+    PS_COUNT_OP(pop1);
+    uint128_t masked = reg1 & ps_width_mask(width);
+    uint64_t  lo     = (uint64_t)masked;
+    uint64_t  hi     = (uint64_t)(masked >> 64);
+    return (uint128_t)(__builtin_popcountll(lo) + __builtin_popcountll(hi)); }
+static inline uint128_t $POP0$(uint128_t reg1, uint8_t width) {   // can i tighten these two inlines up?   
+    PS_COUNT_OP(pop0);
+    if (width > 128) width = 128;
+    uint128_t masked = reg1 & ps_width_mask(width);
+    uint64_t  lo     = (uint64_t)masked;
+    uint64_t  hi     = (uint64_t)(masked >> 64);
+    uint8_t   ones   = (uint8_t)(__builtin_popcountll(lo) + __builtin_popcountll(hi));
+    return (uint128_t)(width - ones); }
 
 #endif // PARALLEL_SATISFACTION_H
